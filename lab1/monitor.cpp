@@ -49,10 +49,9 @@ int main() {
 	pthread_create(&th[0], nullptr, producer, nullptr);
 	pthread_create(&th[1], nullptr, consumer, nullptr);
 
-	pthread_join(th[0], NULL);
-	pthread_join(th[1], NULL);
-
 	pthread_mutex_destroy(&mutex);
 	pthread_cond_destroy(&cond);
+
+	pthread_join(th[1], NULL);
 	return 0;
 }
