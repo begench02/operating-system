@@ -8,7 +8,7 @@
 #include <netinet/in.h>
 #include <errno.h>
 
-#define PORT "8844"
+#define PORT 8844
 #define BACKLOG 1
 
 volatile sig_atomic_t sighupReceived = 0;
@@ -22,12 +22,10 @@ int main() {
 	int incomingSocketFD = 0;
 	struct sockaddr_in socketAddress;
 	int addressLength = sizeof(socketAddress);
-	fd_set readfds;
 	struct sigaction sa;
 	sigset_t blockedMask, origMask;
 	char buffer[4000] = {0};
 	int readBytes;
-	int maxSd;
 
 	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
 		perror("create error");
@@ -51,7 +49,7 @@ int main() {
 	printf("Server running on port: %d\n", PORT);
 
 	sigaction(SIGHUP, NULL, &sa);
-	sa.sa_handler = sighupHandler;
+	sa.sa_handler = sighup_handler;
 	sa.sa_flags |= SA_RESTART;
 	sigaction(SIGHUP, &sa, NULL);
 
@@ -60,17 +58,22 @@ int main() {
 	sigaddset(&blockedMask, SIGHUP);
 	sigprocmask(SIG_BLOCK, &blockedMask, &origMask);
 
-	while (true) {
-		FD_ZERO(&readfds);
-		FD_SET(sockfd, &readfds);
+	
+	fd_set fds;
+	int incoming_socket_fd = 0;
+	int max_socket;
 
-		if (incomingSocketFD > 0) {
-			FD_SET(incomingSocketFD, &readfds);
+	while (1) {
+		FD_ZERO(&fds);
+		FD_SET(sockfd, &fds);
+	
+		if (incoming_socket_fd > 0) {
+			FD_SET(incoming_socket_fd, &fds);
 		}
 
-		maxSd = (incomingSocketFD > serverFD) ? incomingSocketFD : serverFD;
+		max_socket = (incoming_socket_fd > sockfd) ? incoming_socket_fd : sockfd;
 
-		if (pselect(maxSd + 1, &readfds, NULL, NULL, NULL, &origMask) < 0 && errno != EINTR) {
+		if (pselect(max_socket + 1, &fds, NULL, NULL, NULL, &origMask) < 0 && errno != EINTR) {
 			perror("Pselect error");
 			exit(EXIT_FAILURE);
 		}
@@ -81,15 +84,15 @@ int main() {
 			continue;
 		}
 
-		if (incomingSocketFD > 0 && FD_ISSET(incomingSocketFD, &readfds)) {
-			readBytes = read(incomingSocketFD, buffer, 1024);
+		if (incoming_socket_fd > 0 && FD_ISSET(incoming_socket_fd, &fds)) {
+			readBytes = read(incoming_socket_fd, buffer, 1024);
 
 			if (readBytes > 0) {
 				printf("Received data: %d bytes\n", readBytes);
 			} else {
 				if (readBytes == 0) {
-					close(incomingSocketFD);
-					incomingSocketFD = 0;
+					close(incoming_socket_fd);
+					incoming_socket_fd = 0;
 				} else {
 					perror("read error");
 				}
@@ -98,8 +101,8 @@ int main() {
 			continue;
 		}
 
-		if (FD_ISSET(sockfd, &readfds)) {
-			if ((incomingSocketFD = accept(serverFD, (struct sockaddr*)&socketAddress, (socklen_t*)&addressLength)) < 0) {
+		if (FD_ISSET(sockfd, &fds)) {
+			if ((incoming_socket_fd = accept(sockfd, (struct sockaddr*)&socketAddress, (socklen_t*)&addressLength)) < 0) {
 				perror("accept error");
 				exit(EXIT_FAILURE);
 			}
@@ -108,7 +111,7 @@ int main() {
 		}
 	}
 
-	close(serverFD);
+	close(sockfd);
 
 	return 0;
 }
