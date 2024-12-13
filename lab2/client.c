@@ -1,43 +1,43 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-
-#define PORT 8844
 
 int main() {
-	struct sockaddr_in serverAddress;
-	int sock = 0;
-	char* message = "Message from client";
-	char buffer[1024] = {0};
+	int sockfd;
+	struct addrinfo hints;
+	struct addrinfo *result;
 
+	const char *host_name = "127.0.0.1";
+	const char *port_number = "8844";
 
-	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_protocol = IPPROTO_TCP;
+
+	if ((getaddrinfo(host_name, port_number, &hints, &result)) == -1) {
+		perror("Failed to translate client socket");
+		exit(EXIT_FAILURE);
+	}
+
+	if ((sockfd = socket(result->ai_family, result->ai_socktype, result->ai_protocol)) == -1) {
 		printf("socket error\n");
 		exit(EXIT_FAILURE);
 	}
 
-	serverAddress.sin_family = AF_INET;
-	serverAddress.sin_port = htons(PORT);
-
-	if (inet_pton(AF_INET, "127.0.0.1", &serverAddress.sin_addr) <= 0) {
-		printf("inet_pton error\n");
-		exit(EXIT_FAILURE);
-	}
-
-	if (connect(sock, (struct sockaddr*)&serverAddress, sizeof(serverAddress)) < 0) {
+	if (connect(sockfd, result->ai_addr, result->ai_addrlen) == -1) {
 		printf("connect error");
 		exit(EXIT_FAILURE);
 	}
 
-	send(sock, message, strlen(message), 0);
+	char *message = "Hello from client\n";
+	send(sockfd, message, strlen(message), 0);
 	printf("Message sent\n");
 
-	close(sock);
+	close(sockfd);
 
 	return 0;
 }

@@ -8,17 +8,17 @@
 #include <netinet/in.h>
 #include <errno.h>
 
-#define PORT 8844
-#define BACKLOG 5
+#define PORT "8844"
+#define BACKLOG 1
 
 volatile sig_atomic_t sighupReceived = 0;
 
-void sighupHandler(int sigNumber) {
+void sighup_handler(int s) {
 	sighupReceived = 1;
 }
 
 int main() {
-	int serverFD;
+	int sockfd, new_fd;
 	int incomingSocketFD = 0;
 	struct sockaddr_in socketAddress;
 	int addressLength = sizeof(socketAddress);
@@ -28,9 +28,8 @@ int main() {
 	char buffer[4000] = {0};
 	int readBytes;
 	int maxSd;
-	int signalOrConnectionCount = 0;
 
-	if ((serverFD = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
 		perror("create error");
 		exit(EXIT_FAILURE);
 	}
@@ -39,12 +38,12 @@ int main() {
 	socketAddress.sin_addr.s_addr = INADDR_ANY;
 	socketAddress.sin_port = htons(PORT);
 
-	if (bind(serverFD, (struct sockaddr*)& socketAddress, sizeof(socketAddress)) < 0) {
+	if (bind(sockfd, (struct sockaddr*)& socketAddress, sizeof(socketAddress)) == -1) {
 		perror("bind error");
 		exit(EXIT_FAILURE);
 	}
 
-	if (listen(serverFD, BACKLOG) < 0) {
+	if (listen(sockfd, BACKLOG) < 0) {
 		perror("listen error");
 		exit(EXIT_FAILURE);
 	}
@@ -61,9 +60,9 @@ int main() {
 	sigaddset(&blockedMask, SIGHUP);
 	sigprocmask(SIG_BLOCK, &blockedMask, &origMask);
 
-	while (signalOrConnectionCount < 3) {
+	while (true) {
 		FD_ZERO(&readfds);
-		FD_SET(serverFD, &readfds);
+		FD_SET(sockfd, &readfds);
 
 		if (incomingSocketFD > 0) {
 			FD_SET(incomingSocketFD, &readfds);
@@ -79,7 +78,6 @@ int main() {
 		if (sighupReceived) {
 			printf("SIGHUP received!");
 			sighupReceived = 0;
-			signalOrConnectionCount++;
 			continue;
 		}
 
@@ -96,12 +94,11 @@ int main() {
 					perror("read error");
 				}
 
-				signalOrConnectionCount++;
 			}
 			continue;
 		}
 
-		if (FD_ISSET(serverFD, &readfds)) {
+		if (FD_ISSET(sockfd, &readfds)) {
 			if ((incomingSocketFD = accept(serverFD, (struct sockaddr*)&socketAddress, (socklen_t*)&addressLength)) < 0) {
 				perror("accept error");
 				exit(EXIT_FAILURE);
